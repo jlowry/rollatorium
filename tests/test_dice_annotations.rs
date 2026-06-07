@@ -1,7 +1,7 @@
 mod common;
 
 use rand::{SeedableRng, rngs::StdRng};
-use rollatorium::{EvalConfig, Value, eval, eval_with_rng, parse};
+use rollatorium::{EvalConfig, Value, eval, eval_with_rng, parse, roll};
 
 use common::r;
 
@@ -36,8 +36,8 @@ fn test_multiple_annotations_preserve_dice_result() {
     match annotated_result.value {
         Value::Annotated { annotations, expr } => {
             assert_eq!(annotations.len(), 2);
-            assert_eq!(annotations[0].text, "str");
-            assert_eq!(annotations[1].text, "fire");
+            assert_eq!(annotations[0].tag, "str");
+            assert_eq!(annotations[1].tag, "fire");
             let inner = *expr;
             assert!(
                 matches!(inner.value, Value::Dice(_)),
@@ -57,12 +57,36 @@ fn test_nested_annotations_structure() {
 
     match result.value {
         Value::Annotated { annotations, expr } => {
-            let texts: Vec<_> = annotations.iter().map(|ann| ann.text.as_str()).collect();
+            let texts: Vec<_> = annotations.iter().map(|ann| ann.tag).collect();
             assert_eq!(texts, ["inner", "outer"]);
             let inner = *expr;
             assert!(
                 matches!(inner.value, Value::Binary { .. }),
                 "expected binary operation inside annotations"
+            );
+        }
+        other => panic!("expected annotated value, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_annotations_borrow_input_zero_copy() {
+    // The annotation tag must be a `&str` slice pointing *into* the input
+    // buffer, proving no owned String was allocated during parsing.
+    let input = String::from("4d6 [fire]");
+    let result = roll(&input).expect("annotated expression evaluates");
+
+    match result.value {
+        Value::Annotated { annotations, .. } => {
+            assert_eq!(annotations.len(), 1);
+            let tag: &str = annotations[0].tag;
+            assert_eq!(tag, "fire");
+
+            let base = input.as_ptr() as usize;
+            let tag_ptr = tag.as_ptr() as usize;
+            assert!(
+                tag_ptr >= base && tag_ptr < base + input.len(),
+                "tag must borrow the input buffer (zero-copy), not own a new String"
             );
         }
         other => panic!("expected annotated value, got {:?}", other),

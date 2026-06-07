@@ -25,37 +25,37 @@ impl Default for EvalConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct EvalResult {
+pub struct EvalResult<T> {
     pub total: f64,
-    pub value: Value,
+    pub value: Value<T>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Value {
+pub enum Value<T> {
     Literal(f64),
     Unary {
         operator: UnaryOperator,
-        operand: Box<EvalResult>,
+        operand: Box<EvalResult<T>>,
     },
     Binary {
         operator: BinaryOperator,
-        left: Box<EvalResult>,
-        right: Box<EvalResult>,
+        left: Box<EvalResult<T>>,
+        right: Box<EvalResult<T>>,
     },
-    Dice(DiceRoll),
-    Set(SetRoll),
+    Dice(DiceRoll<T>),
+    Set(SetRoll<T>),
     Annotated {
-        expr: Box<EvalResult>,
-        annotations: Vec<Annotation>,
+        expr: Box<EvalResult<T>>,
+        annotations: Vec<Annotation<T>>,
     },
 }
 
 #[derive(Debug, Clone)]
-pub struct DiceRoll {
+pub struct DiceRoll<T> {
     pub quantity: usize,
     pub size: u32,
     pub dice: Vec<DieResult>,
-    pub operations: Vec<SetOperation>,
+    pub operations: Vec<SetOperation<T>>,
 }
 
 #[derive(Debug, Clone)]
@@ -99,34 +99,129 @@ pub enum DieAdjustment {
 }
 
 #[derive(Debug, Clone)]
-pub struct SetRoll {
-    pub elements: Vec<SetElement>,
-    pub operations: Vec<SetOperation>,
+pub struct SetRoll<T> {
+    pub elements: Vec<SetElement<T>>,
+    pub operations: Vec<SetOperation<T>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct SetElement {
-    pub value: EvalResult,
+pub struct SetElement<T> {
+    pub value: EvalResult<T>,
     pub kept: bool,
     pub dropped: bool,
 }
 
-impl SetElement {
+impl<T> SetElement<T> {
     fn refresh_drop_state(&mut self) {
         self.dropped = !self.kept;
     }
+
+    fn map_tags_inner<U, F>(self, f: &mut F) -> SetElement<U>
+    where
+        F: FnMut(T) -> U,
+    {
+        SetElement {
+            value: self.value.map_tags_inner(f),
+            kept: self.kept,
+            dropped: self.dropped,
+        }
+    }
 }
 
-pub fn evaluate(expr: &Node) -> Result<EvalResult> {
+impl<T> EvalResult<T> {
+    /// Transform every tag in the evaluated tree, producing an `EvalResult` over
+    /// a new tag type. The counterpart to [`crate::Node::map_tags`] for results
+    /// that have already been evaluated; only [`Value::Annotated`] wrappers carry
+    /// tags, the rest is rebuilt with children mapped.
+    pub fn map_tags<U, F>(self, mut f: F) -> EvalResult<U>
+    where
+        F: FnMut(T) -> U,
+    {
+        self.map_tags_inner(&mut f)
+    }
+
+    fn map_tags_inner<U, F>(self, f: &mut F) -> EvalResult<U>
+    where
+        F: FnMut(T) -> U,
+    {
+        EvalResult {
+            total: self.total,
+            value: self.value.map_tags_inner(f),
+        }
+    }
+}
+
+impl<T> Value<T> {
+    fn map_tags_inner<U, F>(self, f: &mut F) -> Value<U>
+    where
+        F: FnMut(T) -> U,
+    {
+        match self {
+            Value::Literal(v) => Value::Literal(v),
+            Value::Unary { operator, operand } => Value::Unary {
+                operator,
+                operand: Box::new(operand.map_tags_inner(f)),
+            },
+            Value::Binary {
+                operator,
+                left,
+                right,
+            } => Value::Binary {
+                operator,
+                left: Box::new(left.map_tags_inner(f)),
+                right: Box::new(right.map_tags_inner(f)),
+            },
+            Value::Dice(roll) => Value::Dice(DiceRoll {
+                quantity: roll.quantity,
+                size: roll.size,
+                dice: roll.dice,
+                operations: roll
+                    .operations
+                    .into_iter()
+                    .map(|o| o.map_tags_inner(f))
+                    .collect(),
+            }),
+            Value::Set(roll) => Value::Set(SetRoll {
+                elements: roll
+                    .elements
+                    .into_iter()
+                    .map(|e| e.map_tags_inner(f))
+                    .collect(),
+                operations: roll
+                    .operations
+                    .into_iter()
+                    .map(|o| o.map_tags_inner(f))
+                    .collect(),
+            }),
+            Value::Annotated { expr, annotations } => Value::Annotated {
+                expr: Box::new(expr.map_tags_inner(f)),
+                annotations: annotations
+                    .into_iter()
+                    .map(|a| Annotation { tag: f(a.tag) })
+                    .collect(),
+            },
+        }
+    }
+}
+
+pub fn evaluate<T: Clone>(expr: &Node<T>) -> Result<EvalResult<T>> {
     evaluate_with_config(expr, EvalConfig::default())
 }
 
-pub fn evaluate_with_config(expr: &Node, config: EvalConfig) -> Result<EvalResult> {
+pub fn evaluate_with_config<T: Clone>(
+    expr: &Node<T>,
+    config: EvalConfig,
+) -> Result<EvalResult<T>> {
     evaluate_with_rng(expr, config, rand::rng())
 }
 
-pub fn evaluate_with_rng<R>(expr: &Node, config: EvalConfig, rng: R) -> Result<EvalResult>
+pub fn evaluate_with_rng<T, R>(
+    expr: &Node<T>,
+    config: EvalConfig,
+    rng: R,
+) -> Result<EvalResult<T>>
 where
+    T: Clone,
     R: RngCore,
 {
     Evaluator {
@@ -144,7 +239,7 @@ struct Evaluator<R: RngCore> {
 }
 
 impl<R: RngCore> Evaluator<R> {
-    fn eval(&mut self, node: &Node) -> Result<EvalResult> {
+    fn eval<T: Clone>(&mut self, node: &Node<T>) -> Result<EvalResult<T>> {
         match node {
             Node::Literal(v) => Ok(EvalResult {
                 total: *v,
@@ -201,10 +296,7 @@ impl<R: RngCore> Evaluator<R> {
             Node::Dice { num, size } => self.eval_dice(num.as_deref(), size, &[]),
             Node::DiceWithOps { dice, operations } => match dice.as_ref() {
                 Node::Dice { num, size } => self.eval_dice(num.as_deref(), size, operations),
-                other => Err(Eval(format!(
-                    "DiceWithOps must contain a dice node, found {:?}",
-                    other
-                ))),
+                _ => Err(Eval("DiceWithOps must contain a dice node".into())),
             },
             Node::Set {
                 elements,
@@ -223,12 +315,12 @@ impl<R: RngCore> Evaluator<R> {
         }
     }
 
-    fn eval_dice(
+    fn eval_dice<T: Clone>(
         &mut self,
-        quantity: Option<&Node>,
-        size: &DiceSize,
-        operations: &[SetOperation],
-    ) -> Result<EvalResult> {
+        quantity: Option<&Node<T>>,
+        size: &DiceSize<T>,
+        operations: &[SetOperation<T>],
+    ) -> Result<EvalResult<T>> {
         let quantity_value = match quantity {
             Some(node) => {
                 let result = self.eval(node)?;
@@ -273,7 +365,11 @@ impl<R: RngCore> Evaluator<R> {
         })
     }
 
-    fn eval_set(&mut self, elements: &[Node], operations: &[SetOperation]) -> Result<EvalResult> {
+    fn eval_set<T: Clone>(
+        &mut self,
+        elements: &[Node<T>],
+        operations: &[SetOperation<T>],
+    ) -> Result<EvalResult<T>> {
         let mut evaluated_elements = Vec::with_capacity(elements.len());
         for element in elements {
             let value = self.eval(element)?;
@@ -302,13 +398,13 @@ impl<R: RngCore> Evaluator<R> {
         })
     }
 
-    fn roll_die(&mut self, distribution: &Uniform<u32>, die_size: &DiceSize) -> Result<f64> {
+    fn roll_die<T>(&mut self, distribution: &Uniform<u32>, die_size: &DiceSize<T>) -> Result<f64> {
         if self.rolls >= self.config.max_rolls {
             return Err(Eval("Exceeded maximum number of rolls".into()));
         }
         self.rolls += 1;
         let mut value = distribution.sample(&mut self.rng) as f64;
-        if DiceSize::Percent == *die_size {
+        if matches!(die_size, DiceSize::Percent) {
             value *= 10.0;
         }
 
@@ -341,12 +437,12 @@ impl<R: RngCore> Evaluator<R> {
         Ok(value.round() as u32)
     }
 
-    fn apply_dice_operations(
+    fn apply_dice_operations<T: Clone>(
         &mut self,
         dice: &mut Vec<DieResult>,
         distribution: &Uniform<u32>,
-        operations: &[SetOperation],
-        size: &DiceSize,
+        operations: &[SetOperation<T>],
+        size: &DiceSize<T>,
     ) -> Result<()> {
         for operation in operations {
             match operation.operator {
@@ -493,10 +589,10 @@ impl<R: RngCore> Evaluator<R> {
         Ok(())
     }
 
-    fn apply_set_operations(
+    fn apply_set_operations<T: Clone>(
         &mut self,
-        elements: &mut [SetElement],
-        operations: &[SetOperation],
+        elements: &mut [SetElement<T>],
+        operations: &[SetOperation<T>],
     ) -> Result<()> {
         let mut keep_initialized = false;
         for operation in operations {
@@ -536,7 +632,11 @@ impl<R: RngCore> Evaluator<R> {
         Ok(())
     }
 
-    fn select_dice(&mut self, dice: &[DieResult], selectors: &[Selector]) -> Result<Vec<usize>> {
+    fn select_dice<T: Clone>(
+        &mut self,
+        dice: &[DieResult],
+        selectors: &[Selector<T>],
+    ) -> Result<Vec<usize>> {
         if selectors.is_empty() {
             return Ok(Vec::new());
         }
@@ -589,10 +689,10 @@ impl<R: RngCore> Evaluator<R> {
         Ok(collected)
     }
 
-    fn select_set_elements(
+    fn select_set_elements<T: Clone>(
         &mut self,
-        elements: &[SetElement],
-        selectors: &[Selector],
+        elements: &[SetElement<T>],
+        selectors: &[Selector<T>],
         only_kept: bool,
     ) -> Result<Vec<usize>> {
         if selectors.is_empty() {
@@ -695,9 +795,9 @@ impl<R: RngCore> Evaluator<R> {
             .collect())
     }
 
-    fn select_set_highest(
+    fn select_set_highest<T>(
         &self,
-        elements: &[SetElement],
+        elements: &[SetElement<T>],
         count: usize,
         only_kept: bool,
     ) -> Result<Vec<usize>> {
@@ -714,9 +814,9 @@ impl<R: RngCore> Evaluator<R> {
         Ok(indices)
     }
 
-    fn select_set_lowest(
+    fn select_set_lowest<T>(
         &self,
-        elements: &[SetElement],
+        elements: &[SetElement<T>],
         count: usize,
         only_kept: bool,
     ) -> Result<Vec<usize>> {
@@ -732,9 +832,9 @@ impl<R: RngCore> Evaluator<R> {
         Ok(indices)
     }
 
-    fn select_set_value<F>(
+    fn select_set_value<T, F>(
         &self,
-        elements: &[SetElement],
+        elements: &[SetElement<T>],
         predicate: F,
         only_kept: bool,
     ) -> Result<Vec<usize>>
