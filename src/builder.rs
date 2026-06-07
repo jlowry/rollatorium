@@ -38,7 +38,7 @@ use crate::ast::{
 /// A comparison used by selector-based dice operations such as
 /// [`Roll::reroll`], [`Roll::explode`], [`Roll::keep_where`], and
 /// [`Roll::drop_where`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Compare {
     /// Greater than (`>`).
     Gt,
@@ -72,6 +72,7 @@ impl Compare {
 /// Build one with a constructor ([`lit`], [`dice`], [`die`], [`d_percent`],
 /// [`set`]), chain combinators, then call [`Roll::build`] to obtain the opaque
 /// [`Node`] for [`crate::eval`].
+#[must_use = "a `Roll` is inert until you call `.build()` and evaluate the resulting node"]
 pub struct Roll<T> {
     node: Node<T>,
 }

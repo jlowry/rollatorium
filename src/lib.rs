@@ -1,5 +1,7 @@
+#![doc = include_str!("../README.md")]
 #![cfg_attr(feature = "fail-on-warnings", deny(warnings))]
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 mod ast;
 mod builder;
@@ -10,6 +12,7 @@ mod parser;
 mod token;
 
 pub use crate::ast::{Annotation, Node};
+pub use crate::error::RollatoriumError;
 pub use crate::eval::{
     DiceRoll, DieAdjustment, DieOrigin, DieResult, EvalConfig, EvalResult, SetElement, SetRoll,
     Value,
@@ -26,27 +29,93 @@ pub mod build {
     pub use crate::builder::{Compare, Roll, d_percent, dice, die, lit, set};
 }
 
-pub type Result<T> = std::result::Result<T, error::RollatoriumError>;
+/// A specialized [`Result`](std::result::Result) for this crate, fixing the
+/// error type to [`RollatoriumError`].
+pub type Result<T> = std::result::Result<T, RollatoriumError>;
 
 /// Parse a dice expression into an AST.
 ///
 /// The returned tree borrows annotation tags directly from `input` as `&str`
 /// slices (zero-copy), so it cannot outlive the input. Use [`Node::map_tags`]
-/// to convert the borrowed tags into a caller-defined type.
+/// to convert the borrowed tags into a caller-defined type, or parse straight
+/// into an owned tree with `"…".parse::<Node<String>>()`.
+///
+/// # Errors
+///
+/// Returns [`RollatoriumError::Lexer`] or [`RollatoriumError::Parser`] if
+/// `input` is not a valid dice expression.
+///
+/// # Examples
+///
+/// ```
+/// let node = rollatorium::parse("4d6kh3 [strength]")?;
+/// # Ok::<(), rollatorium::RollatoriumError>(())
+/// ```
 pub fn parse<I: AsRef<str> + ?Sized>(input: &I) -> Result<Node<&str>> {
     let mut parser = parser::Parser::new(input.as_ref())?;
     parser.parse()
 }
 
+/// Evaluate a parsed AST with the default configuration.
+///
+/// This rolls dice using a fresh thread-local RNG. For deterministic results,
+/// use [`eval_with_rng`] with a seeded RNG.
+///
+/// # Errors
+///
+/// Returns [`RollatoriumError::Eval`] if the expression cannot be evaluated,
+/// e.g. a non-positive die size or exceeding [`EvalConfig::max_rolls`].
+///
+/// # Examples
+///
+/// ```
+/// let node = rollatorium::parse("2d6")?;
+/// let result = rollatorium::eval(&node)?;
+/// assert!((2.0..=12.0).contains(&result.total));
+/// # Ok::<(), rollatorium::RollatoriumError>(())
+/// ```
 pub fn eval<T: Clone>(expr: &Node<T>) -> Result<EvalResult<T>> {
     eval_expression(expr)
 }
 
-/// Parse and evaluate a dice expression. The result borrows annotation tags
-/// from `input` as `&str` (zero-copy).
+/// Parse and evaluate a dice expression in one call.
+///
+/// The result borrows annotation tags from `input` as `&str` (zero-copy), so it
+/// cannot outlive the input.
+///
+/// # Errors
+///
+/// Returns a [`RollatoriumError`] if `input` cannot be parsed or evaluated.
+///
+/// # Examples
+///
+/// ```
+/// let result = rollatorium::roll("1d20 + 5")?;
+/// assert!((6.0..=25.0).contains(&result.total));
+/// # Ok::<(), rollatorium::RollatoriumError>(())
+/// ```
 pub fn roll<I: AsRef<str> + ?Sized>(input: &I) -> Result<EvalResult<&str>> {
     let ast = parse(input)?;
     eval(&ast)
+}
+
+/// Parse a dice expression into an AST that owns its tags as `String`.
+///
+/// This is the [`FromStr`](std::str::FromStr) convenience over [`parse`], which
+/// borrows from the input; here the tags are copied so the tree is `'static`.
+///
+/// ```
+/// use rollatorium::Node;
+///
+/// let node: Node<String> = "4d6 [fire]".parse()?;
+/// # Ok::<(), rollatorium::RollatoriumError>(())
+/// ```
+impl std::str::FromStr for Node<String> {
+    type Err = RollatoriumError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        parse(s).map(|node| node.map_tags(|tag| tag.to_owned()))
+    }
 }
 
 #[cfg(test)]

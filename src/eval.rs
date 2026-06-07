@@ -13,8 +13,19 @@ use crate::error::RollatoriumError::Eval;
 
 const EPSILON: f64 = 1e-9;
 
+/// Configuration controlling how an expression is evaluated.
+///
+/// Construct one with [`EvalConfig::default`] (or a struct literal) and pass it
+/// to [`eval_with_config`](crate::eval_with_config) or
+/// [`eval_with_rng`](crate::eval_with_rng).
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EvalConfig {
+    /// The maximum number of individual die rolls allowed for one evaluation.
+    ///
+    /// Rerolling and exploding can roll far more dice than the expression names;
+    /// this bound prevents pathological expressions from looping forever.
+    /// Defaults to `1000`.
     pub max_rolls: usize,
 }
 
@@ -24,51 +35,121 @@ impl Default for EvalConfig {
     }
 }
 
+/// The result of evaluating an expression: its numeric total plus the detailed
+/// tree describing how that total was produced.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EvalResult<T> {
+    /// The final numeric value of the expression.
     pub total: f64,
+    /// The structured breakdown of the evaluation.
     pub value: Value<T>,
 }
 
+/// The structured value produced by evaluating a node, mirroring the shape of
+/// the source [`Node`](crate::Node).
+///
+/// This enum is `#[non_exhaustive]`: match it with a wildcard arm.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum Value<T> {
+    /// A numeric literal.
     Literal(f64),
+    /// A unary operation and its evaluated operand.
     Unary {
+        /// The operator that was applied.
         operator: UnaryOperator,
+        /// The evaluated operand.
         operand: Box<EvalResult<T>>,
     },
+    /// A binary operation and its evaluated operands.
     Binary {
+        /// The operator that was applied.
         operator: BinaryOperator,
+        /// The evaluated left-hand operand.
         left: Box<EvalResult<T>>,
+        /// The evaluated right-hand operand.
         right: Box<EvalResult<T>>,
     },
+    /// A rolled dice pool.
     Dice(DiceRoll<T>),
+    /// An evaluated set literal.
     Set(SetRoll<T>),
+    /// An annotated sub-expression and its tags.
     Annotated {
+        /// The evaluated inner expression.
         expr: Box<EvalResult<T>>,
+        /// The tags attached to `expr`.
         annotations: Vec<Annotation<T>>,
     },
 }
 
+/// A rolled pool of dice together with the operations applied to it.
+///
+/// The individual dice are read-only; inspect them through [`DiceRoll::dice`]
+/// (or by iterating `&DiceRoll`).
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DiceRoll<T> {
-    pub quantity: usize,
-    pub size: u32,
-    pub dice: Vec<DieResult>,
-    pub operations: Vec<SetOperation<T>>,
+    pub(crate) quantity: usize,
+    pub(crate) size: u32,
+    pub(crate) dice: Vec<DieResult>,
+    pub(crate) operations: Vec<SetOperation<T>>,
 }
 
+/// The outcome of a single die within a [`DiceRoll`], including its full reroll
+/// history and any adjustments applied to it.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DieResult {
-    pub value: f64,
-    pub rolls: Vec<f64>,
-    pub kept: bool,
-    pub dropped: bool,
-    pub origin: DieOrigin,
-    pub adjustments: Vec<DieAdjustment>,
+    pub(crate) value: f64,
+    pub(crate) rolls: Vec<f64>,
+    pub(crate) kept: bool,
+    pub(crate) dropped: bool,
+    pub(crate) origin: DieOrigin,
+    pub(crate) adjustments: Vec<DieAdjustment>,
 }
 
 impl DieResult {
+    /// The final value of this die after any rerolls and adjustments.
+    #[must_use]
+    pub fn value(&self) -> f64 {
+        self.value
+    }
+
+    /// Every value this die took, in order — more than one entry means the die
+    /// was rerolled.
+    #[must_use]
+    pub fn rolls(&self) -> &[f64] {
+        &self.rolls
+    }
+
+    /// Whether this die is kept (contributes to the total).
+    #[must_use]
+    pub fn kept(&self) -> bool {
+        self.kept
+    }
+
+    /// Whether this die was dropped (the inverse of [`DieResult::kept`]).
+    #[must_use]
+    pub fn dropped(&self) -> bool {
+        self.dropped
+    }
+
+    /// How this die came to exist (an original roll, a reroll-and-add, or an
+    /// explosion).
+    #[must_use]
+    pub fn origin(&self) -> DieOrigin {
+        self.origin
+    }
+
+    /// The minimum/maximum clamps applied to this die, in the order applied.
+    #[must_use]
+    pub fn adjustments(&self) -> &[DieAdjustment] {
+        &self.adjustments
+    }
+
     fn new(value: f64, origin: DieOrigin) -> Self {
         Self {
             value,
@@ -85,33 +166,83 @@ impl DieResult {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Where a [`DieResult`] came from.
+///
+/// This enum is `#[non_exhaustive]`: match it with a wildcard arm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum DieOrigin {
+    /// A die that was part of the original pool.
     Original,
+    /// A die added by a reroll-and-add (`ra`) operation.
     RerollAdd,
+    /// A die added by an explosion (`e`/`!`) operation.
     Explosion,
 }
 
+/// A clamp applied to a die's value by a minimum or maximum operation.
+///
+/// This enum is `#[non_exhaustive]`: match it with a wildcard arm.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum DieAdjustment {
-    Minimum { threshold: f64, previous: f64 },
-    Maximum { threshold: f64, previous: f64 },
+    /// The die was raised up to `threshold` from `previous`.
+    Minimum {
+        /// The minimum value the die was clamped to.
+        threshold: f64,
+        /// The die's value before clamping.
+        previous: f64,
+    },
+    /// The die was lowered down to `threshold` from `previous`.
+    Maximum {
+        /// The maximum value the die was clamped to.
+        threshold: f64,
+        /// The die's value before clamping.
+        previous: f64,
+    },
 }
 
+/// An evaluated set literal together with the operations applied to it.
+///
+/// The elements are read-only; inspect them through [`SetRoll::elements`] (or by
+/// iterating `&SetRoll`).
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SetRoll<T> {
-    pub elements: Vec<SetElement<T>>,
-    pub operations: Vec<SetOperation<T>>,
+    pub(crate) elements: Vec<SetElement<T>>,
+    pub(crate) operations: Vec<SetOperation<T>>,
 }
 
+/// A single member of a [`SetRoll`], with its evaluated value and keep state.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SetElement<T> {
-    pub value: EvalResult<T>,
-    pub kept: bool,
-    pub dropped: bool,
+    pub(crate) value: EvalResult<T>,
+    pub(crate) kept: bool,
+    pub(crate) dropped: bool,
 }
 
 impl<T> SetElement<T> {
+    /// The evaluated value of this set member.
+    #[must_use]
+    pub fn value(&self) -> &EvalResult<T> {
+        &self.value
+    }
+
+    /// Whether this member is kept (contributes to the set total).
+    #[must_use]
+    pub fn kept(&self) -> bool {
+        self.kept
+    }
+
+    /// Whether this member was dropped (the inverse of [`SetElement::kept`]).
+    #[must_use]
+    pub fn dropped(&self) -> bool {
+        self.dropped
+    }
+
     fn refresh_drop_state(&mut self) {
         self.dropped = !self.kept;
     }
@@ -204,14 +335,142 @@ impl<T> Value<T> {
     }
 }
 
+impl<T> DiceRoll<T> {
+    /// The number of dice the pool was asked to roll (before rerolls or
+    /// explosions added any).
+    #[must_use]
+    pub fn quantity(&self) -> usize {
+        self.quantity
+    }
+
+    /// The number of faces on each die.
+    #[must_use]
+    pub fn size(&self) -> u32 {
+        self.size
+    }
+
+    /// The individual dice in the pool, including dropped and added dice.
+    #[must_use]
+    pub fn dice(&self) -> &[DieResult] {
+        &self.dice
+    }
+
+    /// The operations applied to the pool, in order.
+    #[must_use]
+    pub fn operations(&self) -> &[SetOperation<T>] {
+        &self.operations
+    }
+
+    /// Iterate over the dice in the pool by reference.
+    pub fn iter(&self) -> std::slice::Iter<'_, DieResult> {
+        self.dice.iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a DiceRoll<T> {
+    type Item = &'a DieResult;
+    type IntoIter = std::slice::Iter<'a, DieResult>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.dice.iter()
+    }
+}
+
+impl<T> SetRoll<T> {
+    /// The members of the set, including dropped ones.
+    #[must_use]
+    pub fn elements(&self) -> &[SetElement<T>] {
+        &self.elements
+    }
+
+    /// The operations applied to the set, in order.
+    #[must_use]
+    pub fn operations(&self) -> &[SetOperation<T>] {
+        &self.operations
+    }
+
+    /// Iterate over the members of the set by reference.
+    pub fn iter(&self) -> std::slice::Iter<'_, SetElement<T>> {
+        self.elements.iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a SetRoll<T> {
+    type Item = &'a SetElement<T>;
+    type IntoIter = std::slice::Iter<'a, SetElement<T>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.elements.iter()
+    }
+}
+
+/// Evaluate an AST with the default configuration and a fresh thread-local RNG.
+///
+/// This is the lower-level counterpart to [`crate::eval`]; both delegate here.
+///
+/// # Errors
+///
+/// Returns [`RollatoriumError::Eval`](crate::RollatoriumError::Eval) if
+/// evaluation fails, e.g. a non-positive die size or exceeding
+/// [`EvalConfig::max_rolls`].
+///
+/// # Examples
+///
+/// ```
+/// let node = rollatorium::parse("2d6 + 1")?;
+/// let result = rollatorium::eval_expression(&node)?;
+/// assert!((3.0..=13.0).contains(&result.total));
+/// # Ok::<(), rollatorium::RollatoriumError>(())
+/// ```
 pub fn evaluate<T: Clone>(expr: &Node<T>) -> Result<EvalResult<T>> {
     evaluate_with_config(expr, EvalConfig::default())
 }
 
+/// Evaluate an AST with an explicit [`EvalConfig`] and a fresh thread-local RNG.
+///
+/// # Errors
+///
+/// Returns [`RollatoriumError::Eval`](crate::RollatoriumError::Eval) if
+/// evaluation fails, e.g. a non-positive die size or exceeding
+/// [`EvalConfig::max_rolls`].
+///
+/// # Examples
+///
+/// ```
+/// use rollatorium::{EvalConfig, eval_with_config, parse};
+///
+/// let node = parse("4d6")?;
+/// let result = eval_with_config(&node, EvalConfig { max_rolls: 16 })?;
+/// assert!((4.0..=24.0).contains(&result.total));
+/// # Ok::<(), rollatorium::RollatoriumError>(())
+/// ```
 pub fn evaluate_with_config<T: Clone>(expr: &Node<T>, config: EvalConfig) -> Result<EvalResult<T>> {
     evaluate_with_rng(expr, config, rand::rng())
 }
 
+/// Evaluate an AST with an explicit [`EvalConfig`] and a caller-supplied RNG.
+///
+/// Injecting the RNG makes evaluation deterministic: seed a
+/// [`rand::rngs::StdRng`] to reproduce a roll exactly.
+///
+/// # Errors
+///
+/// Returns [`RollatoriumError::Eval`](crate::RollatoriumError::Eval) if
+/// evaluation fails, e.g. a non-positive die size or exceeding
+/// [`EvalConfig::max_rolls`].
+///
+/// # Examples
+///
+/// ```
+/// use rand::{SeedableRng, rngs::StdRng};
+/// use rollatorium::{EvalConfig, eval_with_rng, parse};
+///
+/// let node = parse("4d6kh3")?;
+/// let rng = StdRng::seed_from_u64(42);
+/// let result = eval_with_rng(&node, EvalConfig::default(), rng)?;
+/// assert!((3.0..=18.0).contains(&result.total));
+/// # Ok::<(), rollatorium::RollatoriumError>(())
+/// ```
 pub fn evaluate_with_rng<T, R>(expr: &Node<T>, config: EvalConfig, rng: R) -> Result<EvalResult<T>>
 where
     T: Clone,
