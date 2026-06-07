@@ -208,18 +208,11 @@ pub fn evaluate<T: Clone>(expr: &Node<T>) -> Result<EvalResult<T>> {
     evaluate_with_config(expr, EvalConfig::default())
 }
 
-pub fn evaluate_with_config<T: Clone>(
-    expr: &Node<T>,
-    config: EvalConfig,
-) -> Result<EvalResult<T>> {
+pub fn evaluate_with_config<T: Clone>(expr: &Node<T>, config: EvalConfig) -> Result<EvalResult<T>> {
     evaluate_with_rng(expr, config, rand::rng())
 }
 
-pub fn evaluate_with_rng<T, R>(
-    expr: &Node<T>,
-    config: EvalConfig,
-    rng: R,
-) -> Result<EvalResult<T>>
+pub fn evaluate_with_rng<T, R>(expr: &Node<T>, config: EvalConfig, rng: R) -> Result<EvalResult<T>>
 where
     T: Clone,
     R: RngCore,

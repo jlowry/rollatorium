@@ -20,9 +20,7 @@ impl From<&str> for Damage {
 
 #[test]
 fn test_map_tags_converts_str_to_enum() {
-    let node = parse(&"4d6 [fire]")
-        .expect("parse")
-        .map_tags(Damage::from);
+    let node = parse(&"4d6 [fire]").expect("parse").map_tags(Damage::from);
 
     let result = eval_with_rng(&node, EvalConfig::default(), StdRng::seed_from_u64(3)).unwrap();
 

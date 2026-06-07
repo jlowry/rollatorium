@@ -177,10 +177,7 @@ impl<T> Node<T> {
                 elements,
                 operations,
             } => Node::Set {
-                elements: elements
-                    .into_iter()
-                    .map(|e| e.map_tags_inner(f))
-                    .collect(),
+                elements: elements.into_iter().map(|e| e.map_tags_inner(f)).collect(),
                 operations: operations
                     .into_iter()
                     .map(|o| o.map_tags_inner(f))
