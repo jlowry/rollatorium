@@ -11,8 +11,8 @@ use crate::{
 
 // ---------- Parser ----------
 pub(crate) struct Parser<'a> {
-    lexer: Lexer,
-    cur_token: Token,
+    lexer: Lexer<'a>,
+    cur_token: Token<'a>,
     input: &'a str,
     selector_depth: usize,
 }
@@ -29,7 +29,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn eat(&mut self, expected: Token) -> Result<()> {
+    fn eat(&mut self, expected: Token<'a>) -> Result<()> {
         if std::mem::discriminant(&self.cur_token) == std::mem::discriminant(&expected) {
             self.cur_token = self.lexer.next_token()?;
             Ok(())
@@ -41,7 +41,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Node> {
+    pub fn parse(&mut self) -> Result<Node<&'a str>> {
         let expr = self.parse_comparison()?;
         if self.cur_token != Token::Eof {
             return Err(RollatoriumError::Parser(format!(
@@ -52,7 +52,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_comparison(&mut self) -> Result<Node> {
+    fn parse_comparison(&mut self) -> Result<Node<&'a str>> {
         let mut node = self.parse_additive()?;
         loop {
             let operator = match self.cur_token {
@@ -78,7 +78,7 @@ impl<'a> Parser<'a> {
         Ok(node)
     }
 
-    fn parse_additive(&mut self) -> Result<Node> {
+    fn parse_additive(&mut self) -> Result<Node<&'a str>> {
         let mut node = self.parse_multiplicative()?;
         loop {
             let operator = match self.cur_token {
@@ -100,7 +100,7 @@ impl<'a> Parser<'a> {
         Ok(node)
     }
 
-    fn parse_multiplicative(&mut self) -> Result<Node> {
+    fn parse_multiplicative(&mut self) -> Result<Node<&'a str>> {
         let mut node = self.parse_unary()?;
         loop {
             let operator = match self.cur_token {
@@ -124,7 +124,7 @@ impl<'a> Parser<'a> {
         Ok(node)
     }
 
-    fn parse_unary(&mut self) -> Result<Node> {
+    fn parse_unary(&mut self) -> Result<Node<&'a str>> {
         match self.cur_token {
             Token::Plus => {
                 self.eat(Token::Plus)?;
@@ -144,13 +144,13 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_postfix(&mut self) -> Result<Node> {
+    fn parse_postfix(&mut self) -> Result<Node<&'a str>> {
         let node = self.parse_atom()?;
         let node = self.parse_modifiers(node)?;
         self.parse_annotations(node)
     }
 
-    fn parse_atom(&mut self) -> Result<Node> {
+    fn parse_atom(&mut self) -> Result<Node<&'a str>> {
         match &self.cur_token {
             Token::Number(value) => {
                 let literal = Node::Literal(*value);
@@ -173,7 +173,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_parenthesized_or_set(&mut self) -> Result<Node> {
+    fn parse_parenthesized_or_set(&mut self) -> Result<Node<&'a str>> {
         self.eat(Token::LParen)?;
         if self.cur_token == Token::RParen {
             self.eat(Token::RParen)?;
@@ -228,7 +228,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_dice_literal(&mut self, quantity: Option<Node>) -> Result<Node> {
+    fn parse_dice_literal(&mut self, quantity: Option<Node<&'a str>>) -> Result<Node<&'a str>> {
         match self.cur_token.clone() {
             Token::Dice => {
                 self.eat(Token::Dice)?;
@@ -264,7 +264,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_modifiers(&mut self, node: Node) -> Result<Node> {
+    fn parse_modifiers(&mut self, node: Node<&'a str>) -> Result<Node<&'a str>> {
         if self.selector_depth > 0 {
             return Ok(node);
         }
@@ -354,7 +354,7 @@ impl<'a> Parser<'a> {
         &mut self,
         symbol: &str,
         operator: SetOperator,
-    ) -> Result<Vec<Selector>> {
+    ) -> Result<Vec<Selector<&'a str>>> {
         if !self.is_selector_start(&self.cur_token) {
             return Err(RollatoriumError::Parser(format!(
                 "Expected selector after '{}' in '{}'",
@@ -377,7 +377,7 @@ impl<'a> Parser<'a> {
         Ok(selectors)
     }
 
-    fn parse_selector(&mut self) -> Result<Selector> {
+    fn parse_selector(&mut self) -> Result<Selector<&'a str>> {
         let (kind, prefix) = match self.cur_token {
             Token::SelectorHigh => {
                 self.eat(Token::SelectorHigh)?;
@@ -433,7 +433,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn is_selector_start(&self, token: &Token) -> bool {
+    fn is_selector_start(&self, token: &Token<'a>) -> bool {
         matches!(
             token,
             Token::SelectorHigh
@@ -453,7 +453,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn selector_value_starts(&self, token: &Token) -> bool {
+    fn selector_value_starts(&self, token: &Token<'a>) -> bool {
         matches!(
             token,
             Token::Plus
@@ -465,9 +465,9 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn with_selector_context<F>(&mut self, f: F) -> Result<Node>
+    fn with_selector_context<F>(&mut self, f: F) -> Result<Node<&'a str>>
     where
-        F: FnOnce(&mut Self) -> Result<Node>,
+        F: FnOnce(&mut Self) -> Result<Node<&'a str>>,
     {
         self.selector_depth += 1;
         let result = f(self);
@@ -475,7 +475,7 @@ impl<'a> Parser<'a> {
         result
     }
 
-    fn parse_selector_value_inner(&mut self) -> Result<Node> {
+    fn parse_selector_value_inner(&mut self) -> Result<Node<&'a str>> {
         match &self.cur_token {
             Token::Plus => {
                 self.eat(Token::Plus)?;
@@ -520,7 +520,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_annotations(&mut self, node: Node) -> Result<Node> {
+    fn parse_annotations(&mut self, node: Node<&'a str>) -> Result<Node<&'a str>> {
         if self.selector_depth > 0 {
             return Ok(node);
         }
@@ -530,12 +530,9 @@ impl<'a> Parser<'a> {
 
         while let Token::AnnotationStart = self.cur_token {
             self.eat(Token::AnnotationStart)?;
-            let text = match &self.cur_token {
-                Token::AnnotationText(value) => {
-                    let text = value.clone();
-                    self.eat(Token::AnnotationText(text.clone()))?;
-                    text
-                }
+            // The tag borrows directly from the input (`&'a str`, Copy) — no allocation.
+            let tag = match &self.cur_token {
+                Token::AnnotationText(value) => *value,
                 token => {
                     return Err(RollatoriumError::Parser(format!(
                         "Expected annotation text, found {:?} in '{}'",
@@ -543,6 +540,7 @@ impl<'a> Parser<'a> {
                     )));
                 }
             };
+            self.eat(Token::AnnotationText(tag))?;
 
             if let Token::AnnotationEnd = self.cur_token {
                 self.eat(Token::AnnotationEnd)?;
@@ -552,7 +550,7 @@ impl<'a> Parser<'a> {
                 ));
             }
 
-            annotations.push(Annotation { text });
+            annotations.push(Annotation { tag });
         }
 
         if annotations.is_empty() {
@@ -586,7 +584,7 @@ mod tests {
         UnaryOperator,
     };
 
-    fn parse(input: &str) -> Node {
+    fn parse(input: &str) -> Node<&str> {
         let mut parser = Parser::new(input).expect("lexer to succeed");
         parser.parse().expect("parser to succeed")
     }
@@ -671,9 +669,7 @@ mod tests {
                     num: Some(Box::new(Node::Literal(3.0))),
                     size: DiceSize::Value(Box::new(Node::Literal(6.0))),
                 }),
-                annotations: vec![Annotation {
-                    text: "fire".to_string(),
-                }],
+                annotations: vec![Annotation { tag: "fire" }],
             }
         );
     }

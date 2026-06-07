@@ -2,13 +2,14 @@
 #![forbid(unsafe_code)]
 
 mod ast;
+mod builder;
 mod error;
 mod eval;
 mod lexer;
 mod parser;
 mod token;
 
-use crate::ast::Node;
+pub use crate::ast::{Annotation, Node};
 pub use crate::eval::{
     DiceRoll, DieAdjustment, DieOrigin, DieResult, EvalConfig, EvalResult, SetElement, SetRoll,
     Value,
@@ -18,18 +19,32 @@ pub use crate::eval::{
     evaluate_with_rng as eval_with_rng,
 };
 
+/// Fluent builder for constructing dice-expression ASTs with caller-defined
+/// tags, without exposing the internal [`Node`] representation. See
+/// [`build::Roll`].
+pub mod build {
+    pub use crate::builder::{Compare, Roll, d_percent, dice, die, lit, set};
+}
+
 pub type Result<T> = std::result::Result<T, error::RollatoriumError>;
 
-pub fn parse<I: AsRef<str>>(input: &I) -> Result<Node> {
+/// Parse a dice expression into an AST.
+///
+/// The returned tree borrows annotation tags directly from `input` as `&str`
+/// slices (zero-copy), so it cannot outlive the input. Use [`Node::map_tags`]
+/// to convert the borrowed tags into a caller-defined type.
+pub fn parse<I: AsRef<str> + ?Sized>(input: &I) -> Result<Node<&str>> {
     let mut parser = parser::Parser::new(input.as_ref())?;
     parser.parse()
 }
 
-pub fn eval(expr: &Node) -> Result<EvalResult> {
+pub fn eval<T: Clone>(expr: &Node<T>) -> Result<EvalResult<T>> {
     eval_expression(expr)
 }
 
-pub fn roll<I: AsRef<str>>(input: &I) -> Result<EvalResult> {
+/// Parse and evaluate a dice expression. The result borrows annotation tags
+/// from `input` as `&str` (zero-copy).
+pub fn roll<I: AsRef<str> + ?Sized>(input: &I) -> Result<EvalResult<&str>> {
     let ast = parse(input)?;
     eval(&ast)
 }

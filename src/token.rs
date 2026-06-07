@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Token {
+pub(crate) enum Token<'a> {
     Number(f64),
     Plus,
     Minus,
@@ -31,7 +31,7 @@ pub(crate) enum Token {
     SetEnd,
     Comma,
     AnnotationStart,
-    AnnotationText(String),
+    AnnotationText(&'a str),
     AnnotationEnd,
     Eof,
 }

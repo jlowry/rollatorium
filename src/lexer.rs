@@ -1,15 +1,17 @@
 use crate::{error::RollatoriumError, token::Token};
 
-pub(crate) struct Lexer {
-    chars: Vec<char>,
+pub(crate) struct Lexer<'a> {
+    input: &'a str,
+    chars: Vec<(usize, char)>,
     pos: usize,
     annotation_mode: bool,
 }
 
-impl Lexer {
-    pub fn new(input: &str) -> Self {
+impl<'a> Lexer<'a> {
+    pub fn new(input: &'a str) -> Self {
         Lexer {
-            chars: input.chars().collect(),
+            input,
+            chars: input.char_indices().collect(),
             pos: 0,
             annotation_mode: false,
         }
@@ -25,7 +27,16 @@ impl Lexer {
 
     fn peek_offset(&self, offset: usize) -> char {
         let idx = self.pos + offset;
-        *self.chars.get(idx).unwrap_or(&'\0')
+        self.chars.get(idx).map(|&(_, c)| c).unwrap_or('\0')
+    }
+
+    /// Byte offset of the char at `idx`, or the end of the input when `idx` is
+    /// at or past the final char. Used to slice borrowed sub-strings of `input`.
+    fn byte_at(&self, idx: usize) -> usize {
+        self.chars
+            .get(idx)
+            .map(|&(b, _)| b)
+            .unwrap_or(self.input.len())
     }
 
     fn advance(&mut self) {
@@ -53,7 +64,7 @@ impl Lexer {
             .all(|(idx, ch)| self.peek_offset(idx) == ch)
     }
 
-    fn number(&mut self) -> crate::Result<Token> {
+    fn number(&mut self) -> crate::Result<Token<'a>> {
         let start = self.pos;
         let mut seen_digit = false;
         let mut seen_dot = false;
@@ -85,7 +96,7 @@ impl Lexer {
             )));
         }
 
-        let num_str: String = self.chars[start..self.pos].iter().collect();
+        let num_str = &self.input[self.byte_at(start)..self.byte_at(self.pos)];
         match num_str.parse::<f64>() {
             Ok(value) => Ok(Token::Number(value)),
             Err(_) => Err(RollatoriumError::Lexer(format!(
@@ -95,7 +106,7 @@ impl Lexer {
         }
     }
 
-    pub fn next_token(&mut self) -> crate::Result<Token> {
+    pub fn next_token(&mut self) -> crate::Result<Token<'a>> {
         if !self.annotation_mode {
             self.skip_ws();
         }
@@ -119,9 +130,10 @@ impl Lexer {
                 ));
             }
 
-            let text: String = self.chars[start..self.pos].iter().collect();
+            let raw = &self.input[self.byte_at(start)..self.byte_at(self.pos)];
             self.annotation_mode = false;
-            return Ok(Token::AnnotationText(text.trim().to_string()));
+            // `str::trim` returns a borrowed sub-slice of `input`; no allocation.
+            return Ok(Token::AnnotationText(raw.trim()));
         }
 
         if self.starts_with("//") {
