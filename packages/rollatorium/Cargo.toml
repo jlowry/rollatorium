@@ -14,17 +14,19 @@ categories = ["games", "parser-implementations"]
 [features]
 default = ["macros"]
 macros = ["dep:rollatorium-macros"]
-fail-on-warnings = []
-serde = ["dep:serde", "rollatorium-core/serde"]
+# Forward to the crates that hold the actual code; the facade itself is glue.
+fail-on-warnings = ["rollatorium-core/fail-on-warnings", "rollatorium-macros?/fail-on-warnings"]
+serde = ["rollatorium-core/serde"]
 
+# This crate is a thin re-export facade; rand/thiserror/serde are used only by
+# `rollatorium-core` (re-exported transitively), so they are not direct deps
+# here. `rand` stays as a dev-dependency because the integration tests use it.
 [dependencies]
 rollatorium-core = { workspace = true }
 rollatorium-macros = { workspace = true, optional = true }
-rand = { workspace = true }
-thiserror = { workspace = true }
-serde = { workspace = true, optional = true }
 
 [dev-dependencies]
+rand = { workspace = true }
 proptest = { workspace = true }
 serde_json = { workspace = true }
 trybuild = { workspace = true }

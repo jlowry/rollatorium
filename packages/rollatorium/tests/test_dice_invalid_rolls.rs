@@ -49,3 +49,16 @@ fn test_modulo_by_zero() {
 fn test_divide_by_dropped_dice_total() {
     let _ = r("1 / (1, 2)p<9");
 }
+
+// A numeric literal too large for `f64` parses to infinity; the lexer must
+// reject it rather than carry a non-finite value forward (the `dice!` macro
+// reconstructs literals and asserts finiteness, so parse and the macro agree).
+#[test]
+fn test_overflowing_literal_is_rejected() {
+    let huge = format!("1{}", "0".repeat(400));
+    let err = rollatorium::parse(&huge).unwrap_err();
+    assert!(
+        matches!(err, rollatorium::RollatoriumError::Lexer(_)),
+        "expected a lexer error for an f64-overflowing literal, got {err:?}"
+    );
+}

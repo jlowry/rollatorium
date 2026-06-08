@@ -98,7 +98,14 @@ impl<'a> Lexer<'a> {
 
         let num_str = &self.input[self.byte_at(start)..self.byte_at(self.pos)];
         match num_str.parse::<f64>() {
-            Ok(value) => Ok(Token::Number(value)),
+            // A literal that overflows `f64` parses to an infinity; reject it so
+            // both `parse` and the `dice!` macro fail cleanly instead of carrying
+            // a non-finite value forward (the macro asserts finiteness).
+            Ok(value) if value.is_finite() => Ok(Token::Number(value)),
+            Ok(_) => Err(RollatoriumError::Lexer(format!(
+                "Number literal '{}' is too large to represent",
+                num_str
+            ))),
             Err(_) => Err(RollatoriumError::Lexer(format!(
                 "Failed to parse number literal '{}'",
                 num_str
