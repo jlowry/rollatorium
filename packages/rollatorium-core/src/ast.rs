@@ -12,8 +12,8 @@
 /// The type parameter `T` is the *tag* attached to [`Node::Annotated`]
 /// wrappers.  Parsing a string yields `Node<&str>` whose tags borrow directly
 /// from the input (no allocation); callers can retag to their own type with
-/// [`Node::map_tags`] or construct a tree from scratch with the
-/// [`crate::build`] builder.
+/// [`Node::map_tags`] or construct a tree from scratch with the `rollatorium`
+/// crate's `build` module.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Node<T> {

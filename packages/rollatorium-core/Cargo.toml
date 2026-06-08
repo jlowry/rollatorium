@@ -1,0 +1,25 @@
+[package]
+name = "rollatorium-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Lexer, parser, and AST for tabletop-RPG dice expressions (the kernel shared by rollatorium and rollatorium-macros)"
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/rollatorium-core"
+readme = false
+keywords = ["dice", "rpg", "tabletop", "roll", "parser"]
+categories = ["games", "parser-implementations"]
+
+[features]
+default = []
+fail-on-warnings = []
+serde = ["dep:serde"]
+
+[dependencies]
+rand = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[package.metadata.docs.rs]
+all-features = true

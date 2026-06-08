@@ -7,8 +7,8 @@
 //! [`Roll`] and finish with [`Roll::build`].
 //!
 //! ```
-//! use rollatorium::build::dice;
-//! use rollatorium::eval;
+//! use rollatorium_core::build::Roll;
+//! use rollatorium_core::eval;
 //!
 //! #[derive(Clone, Debug, PartialEq)]
 //! enum Damage {
@@ -17,10 +17,10 @@
 //! }
 //!
 //! // 4d6kh3 [Slashing] + 2d6 [Fire]
-//! let expr = dice::<Damage>(4, 6)
+//! let expr = Roll::<Damage>::dice(4, 6)
 //!     .keep_highest(3)
 //!     .tag(Damage::Slashing)
-//!     .add(dice(2, 6).tag(Damage::Fire))
+//!     .add(Roll::dice(2, 6).tag(Damage::Fire))
 //!     .build();
 //!
 //! let result = eval(&expr).unwrap();
@@ -69,9 +69,9 @@ impl Compare {
 
 /// An expression under construction.
 ///
-/// Build one with a constructor ([`lit`], [`dice`], [`die`], [`d_percent`],
-/// [`set`]), chain combinators, then call [`Roll::build`] to obtain the opaque
-/// [`Node`] for [`crate::eval`].
+/// Build one with a constructor ([`Roll::lit`], [`Roll::dice`], [`Roll::die`],
+/// [`Roll::d_percent`], [`Roll::set`]), chain combinators, then call
+/// [`Roll::build`] to obtain the opaque [`Node`] for [`crate::eval`].
 #[must_use = "a `Roll` is inert until you call `.build()` and evaluate the resulting node"]
 pub struct Roll<T> {
     node: Node<T>,
@@ -263,6 +263,45 @@ impl<T> Roll<T> {
             tags.into_iter().map(|tag| Annotation { tag }).collect();
         Roll::wrap(attach_tags(self.node, annotations))
     }
+
+    // ----- constructors -----
+
+    /// A numeric literal.
+    pub fn lit(value: f64) -> Roll<T> {
+        Roll::wrap(Node::Literal(value))
+    }
+
+    /// `count` dice of `faces` sides (e.g. `Roll::dice(4, 6)` == `4d6`).
+    pub fn dice(count: u32, faces: u32) -> Roll<T> {
+        Roll::wrap(Node::Dice {
+            num: Some(Box::new(Node::Literal(f64::from(count)))),
+            size: DiceSize::Value(Box::new(Node::Literal(f64::from(faces)))),
+        })
+    }
+
+    /// A single die of `faces` sides (e.g. `Roll::die(20)` == `d20`).
+    pub fn die(faces: u32) -> Roll<T> {
+        Roll::wrap(Node::Dice {
+            num: None,
+            size: DiceSize::Value(Box::new(Node::Literal(f64::from(faces)))),
+        })
+    }
+
+    /// A percentile die (`d%`).
+    pub fn d_percent() -> Roll<T> {
+        Roll::wrap(Node::Dice {
+            num: None,
+            size: DiceSize::Percent,
+        })
+    }
+
+    /// A set literal from the given elements (e.g. `{a, b, c}`).
+    pub fn set(elements: impl IntoIterator<Item = Roll<T>>) -> Roll<T> {
+        Roll::wrap(Node::Set {
+            elements: elements.into_iter().map(|r| r.node).collect(),
+            operations: Vec::new(),
+        })
+    }
 }
 
 fn attach_operation<T>(node: Node<T>, op: SetOperation<T>) -> Node<T> {
@@ -314,41 +353,4 @@ fn attach_tags<T>(node: Node<T>, tags: Vec<Annotation<T>>) -> Node<T> {
             annotations: tags,
         },
     }
-}
-
-/// A numeric literal.
-pub fn lit<T>(value: f64) -> Roll<T> {
-    Roll::wrap(Node::Literal(value))
-}
-
-/// `count` dice of `faces` sides (e.g. `dice(4, 6)` == `4d6`).
-pub fn dice<T>(count: u32, faces: u32) -> Roll<T> {
-    Roll::wrap(Node::Dice {
-        num: Some(Box::new(Node::Literal(f64::from(count)))),
-        size: DiceSize::Value(Box::new(Node::Literal(f64::from(faces)))),
-    })
-}
-
-/// A single die of `faces` sides (e.g. `die(20)` == `d20`).
-pub fn die<T>(faces: u32) -> Roll<T> {
-    Roll::wrap(Node::Dice {
-        num: None,
-        size: DiceSize::Value(Box::new(Node::Literal(f64::from(faces)))),
-    })
-}
-
-/// A percentile die (`d%`).
-pub fn d_percent<T>() -> Roll<T> {
-    Roll::wrap(Node::Dice {
-        num: None,
-        size: DiceSize::Percent,
-    })
-}
-
-/// A set literal from the given elements (e.g. `{a, b, c}`).
-pub fn set<T>(elements: impl IntoIterator<Item = Roll<T>>) -> Roll<T> {
-    Roll::wrap(Node::Set {
-        elements: elements.into_iter().map(|r| r.node).collect(),
-        operations: Vec::new(),
-    })
 }

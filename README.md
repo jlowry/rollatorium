@@ -1,76 +1,30 @@
 # rollatorium
 
-A Rust library for parsing and evaluating tabletop-RPG dice expressions such as
-`4d6kh3`, `3d6rr<3`, `2d6mi3ma5`, and annotated rolls like `4d6 [fire damage]`.
+Parse and evaluate tabletop-RPG dice expressions (`4d6kh3`, `3d6rr<3`,
+`2d6mi3ma5`, annotated rolls like `4d6 [fire damage]`) into a detailed result
+tree.
 
-It exposes `parse`/`eval`/`roll` functions and a detailed result tree describing
-every die rolled, kept, dropped, rerolled, exploded, or clamped.
+This repository is a Cargo workspace with three crates under `packages/`:
 
-## Usage
+| Crate | What it is |
+| ----- | ---------- |
+| [`rollatorium`](packages/rollatorium) | The published library: re-exports the core API and adds the compile-time `dice!` macro. **Start here.** |
+| [`rollatorium-core`](packages/rollatorium-core) | Lexer, parser, AST, evaluator, and fluent builder — no proc macro, no compile-time codegen. |
+| [`rollatorium-macros`](packages/rollatorium-macros) | The `dice!` procedural macro, which parses and validates an expression at compile time. |
 
-```rust
-use rollatorium::roll;
+See [`packages/rollatorium/README.md`](packages/rollatorium/README.md) for usage,
+and [`CLAUDE.md`](CLAUDE.md) for the layout and development commands.
 
-// Parse and evaluate in one call.
-let result = roll("2d6 + 3").unwrap();
-assert!((5.0..=15.0).contains(&result.total));
-```
-
-For more control, parse once and evaluate with an injected RNG for deterministic
-results:
+## Quick start
 
 ```rust
-use rand::{SeedableRng, rngs::StdRng};
-use rollatorium::{EvalConfig, eval_with_rng, parse};
+// Runtime parse + evaluate:
+let result = rollatorium::roll("4d6kh3 + 2 [strength]")?;
 
-let node = parse("4d6kh3").unwrap();
-let rng = StdRng::seed_from_u64(42);
-let result = eval_with_rng(&node, EvalConfig::default(), rng).unwrap();
-assert!((3.0..=18.0).contains(&result.total));
+// Compile-time parse + validate (a bad string is a compile error):
+let ast = rollatorium::dice!("4d6kh3 [strength]"); // Node<&'static str>
+# Ok::<(), rollatorium::RollatoriumError>(())
 ```
 
-Inspect the result tree to see exactly what happened to each die:
-
-```rust
-use rollatorium::{Value, roll};
-
-if let Value::Dice(pool) = roll("4d6kh3").unwrap().value {
-    for die in &pool {
-        println!("die {} kept={}", die.value(), die.kept());
-    }
-}
-```
-
-## Expression syntax
-
-| Syntax        | Meaning                                            |
-| ------------- | -------------------------------------------------- |
-| `4d6`         | roll four six-sided dice                           |
-| `d%`          | a percentile die                                   |
-| `4d6kh3`      | keep the highest three                             |
-| `4d6kl1`      | keep the lowest one                                |
-| `4d6ph1`      | drop the highest one                               |
-| `3d6rr<3`     | reroll dice below 3 until none match               |
-| `3d6ro<4`     | reroll dice below 4 exactly once                   |
-| `1d6ra==6`    | reroll-and-add on a 6                              |
-| `1d6e==6`     | explode on a 6                                      |
-| `2d6mi3ma5`   | clamp each die to the range 3–5                    |
-| `4d6 [fire]`  | annotate a roll with a caller-defined tag          |
-
-The [`build`] module offers a fluent builder for constructing expressions in
-code without going through a string.
-
-## Cargo features
-
-- `serde` — derive `Serialize`/`Deserialize` on the AST and result types.
-- `fail-on-warnings` — turn warnings (including missing docs) into hard errors;
-  intended for CI.
-
-## License
-
-Dual-licensed under either of
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
+Licensed under either of MIT (`LICENSE-MIT`) or Apache-2.0 (`LICENSE-APACHE`) at
+your option.

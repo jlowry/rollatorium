@@ -1,0 +1,24 @@
+[package]
+name = "rollatorium-macros"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Compile-time dice-expression macro for rollatorium (provides rollatorium::dice!)"
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/rollatorium-macros"
+readme = false
+keywords = ["dice", "rpg", "macro", "proc-macro"]
+categories = ["games", "rust-patterns"]
+
+[lib]
+proc-macro = true
+
+[features]
+fail-on-warnings = []
+
+[dependencies]
+syn = { workspace = true }
+quote = { workspace = true }
+proc-macro2 = { workspace = true }
+rollatorium-core = { workspace = true }

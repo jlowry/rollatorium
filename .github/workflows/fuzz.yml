@@ -31,4 +31,5 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz
       - name: Run parser fuzzer (smoke test)
+        working-directory: packages/rollatorium
         run: cargo fuzz run parser -- -runs=1000

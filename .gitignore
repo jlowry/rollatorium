@@ -1,5 +1,3 @@
 Cargo.lock
 /target
-/fuzz/artifacts
-/fuzz/corpus
-/fuzz/coverage
+# The fuzz crate (packages/rollatorium/fuzz) has its own .gitignore.

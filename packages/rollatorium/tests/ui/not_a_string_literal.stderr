@@ -1,0 +1,5 @@
+error: expected string literal
+ --> tests/ui/not_a_string_literal.rs:4:32
+  |
+4 |     let _ = rollatorium::dice!(expr);
+  |                                ^^^^

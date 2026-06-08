@@ -1,0 +1,5 @@
+error: Parser error: Expected selector after 'k' in '4d6kkk'
+ --> tests/ui/invalid_expression.rs:3:32
+  |
+3 |     let _ = rollatorium::dice!("4d6kkk");
+  |                                ^^^^^^^^

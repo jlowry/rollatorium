@@ -417,10 +417,10 @@ impl<'a, T> IntoIterator for &'a SetRoll<T> {
 /// # Examples
 ///
 /// ```
-/// let node = rollatorium::parse("2d6 + 1")?;
-/// let result = rollatorium::eval_expression(&node)?;
+/// let node = rollatorium_core::parse("2d6 + 1")?;
+/// let result = rollatorium_core::eval_expression(&node)?;
 /// assert!((3.0..=13.0).contains(&result.total));
-/// # Ok::<(), rollatorium::RollatoriumError>(())
+/// # Ok::<(), rollatorium_core::RollatoriumError>(())
 /// ```
 pub fn evaluate<T: Clone>(expr: &Node<T>) -> Result<EvalResult<T>> {
     evaluate_with_config(expr, EvalConfig::default())
@@ -437,12 +437,12 @@ pub fn evaluate<T: Clone>(expr: &Node<T>) -> Result<EvalResult<T>> {
 /// # Examples
 ///
 /// ```
-/// use rollatorium::{EvalConfig, eval_with_config, parse};
+/// use rollatorium_core::{EvalConfig, eval_with_config, parse};
 ///
 /// let node = parse("4d6")?;
 /// let result = eval_with_config(&node, EvalConfig { max_rolls: 16 })?;
 /// assert!((4.0..=24.0).contains(&result.total));
-/// # Ok::<(), rollatorium::RollatoriumError>(())
+/// # Ok::<(), rollatorium_core::RollatoriumError>(())
 /// ```
 pub fn evaluate_with_config<T: Clone>(expr: &Node<T>, config: EvalConfig) -> Result<EvalResult<T>> {
     evaluate_with_rng(expr, config, rand::rng())
@@ -463,13 +463,13 @@ pub fn evaluate_with_config<T: Clone>(expr: &Node<T>, config: EvalConfig) -> Res
 ///
 /// ```
 /// use rand::{SeedableRng, rngs::StdRng};
-/// use rollatorium::{EvalConfig, eval_with_rng, parse};
+/// use rollatorium_core::{EvalConfig, eval_with_rng, parse};
 ///
 /// let node = parse("4d6kh3")?;
 /// let rng = StdRng::seed_from_u64(42);
 /// let result = eval_with_rng(&node, EvalConfig::default(), rng)?;
 /// assert!((3.0..=18.0).contains(&result.total));
-/// # Ok::<(), rollatorium::RollatoriumError>(())
+/// # Ok::<(), rollatorium_core::RollatoriumError>(())
 /// ```
 pub fn evaluate_with_rng<T, R>(expr: &Node<T>, config: EvalConfig, rng: R) -> Result<EvalResult<T>>
 where

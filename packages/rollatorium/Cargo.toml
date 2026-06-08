@@ -1,0 +1,33 @@
+[package]
+name = "rollatorium"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Parse and evaluate tabletop-RPG dice expressions (4d6kh3, 3d6rr<3, annotated rolls) into a detailed result tree"
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/rollatorium"
+readme = "README.md"
+keywords = ["dice", "rpg", "tabletop", "roll", "parser"]
+categories = ["games", "parser-implementations"]
+
+[features]
+default = ["macros"]
+macros = ["dep:rollatorium-macros"]
+fail-on-warnings = []
+serde = ["dep:serde", "rollatorium-core/serde"]
+
+[dependencies]
+rollatorium-core = { workspace = true }
+rollatorium-macros = { workspace = true, optional = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+serde_json = { workspace = true }
+trybuild = { workspace = true }
+
+[package.metadata.docs.rs]
+all-features = true

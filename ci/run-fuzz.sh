@@ -10,4 +10,8 @@ if ! command -v cargo-fuzz >/dev/null 2>&1; then
     exit 1
 fi
 
+# The fuzz crate lives alongside the `rollatorium` package it fuzzes.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${script_dir}/../packages/rollatorium"
+
 exec ${CARGO} fuzz run "${FUZZ_TARGET}" -- -runs="${FUZZ_RUNS}"
