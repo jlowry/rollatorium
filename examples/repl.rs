@@ -14,6 +14,7 @@ fn main() {
 
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
+            Ok(0) => break, // EOF (e.g. piped input or Ctrl-D)
             Ok(_) => {
                 let trimmed = input.trim();
                 if trimmed.is_empty() {
