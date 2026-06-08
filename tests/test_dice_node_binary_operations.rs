@@ -1,7 +1,7 @@
 mod common;
 use common::r;
 
-use rollatorium::roll;
+use rollatorium::{RollatoriumError, roll};
 
 // ============================================================================
 // Node Tests - Binary Operations
@@ -95,22 +95,28 @@ fn test_binop_dice_percent_mod_range() {
 
 #[test]
 fn test_div_zero_slash() {
-    // Division by zero results in infinity in Rust float arithmetic
-    let result = r("10 / 0");
-    assert!(result.is_infinite());
+    // Division by a zero divisor returns a handled error rather than a
+    // non-finite (`inf`) total.
+    assert!(matches!(
+        roll(&"10 / 0"),
+        Err(RollatoriumError::DivisionByZero)
+    ));
 }
 
 #[test]
 fn test_div_zero_double_slash() {
-    // Integer division by zero should error
-    // TODO: Check if this should panic or return an error
-    let result = roll(&"10 // 0");
-    assert!(result.is_err() || result.unwrap().total.is_infinite());
+    // Integer division by a zero divisor errors the same way.
+    assert!(matches!(
+        roll(&"10 // 0"),
+        Err(RollatoriumError::DivisionByZero)
+    ));
 }
 
 #[test]
 fn test_div_zero_modulo() {
-    // Modulo by zero should be NaN
-    let result = r("10 % 0");
-    assert!(result.is_nan());
+    // A zero modulus errors rather than producing `NaN`.
+    assert!(matches!(
+        roll(&"10 % 0"),
+        Err(RollatoriumError::DivisionByZero)
+    ));
 }

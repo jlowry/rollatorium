@@ -9,7 +9,7 @@ use crate::ast::{
     Annotation, BinaryOperator, DiceSize, Node, Selector, SelectorKind, SetOperation, SetOperator,
     UnaryOperator,
 };
-use crate::error::RollatoriumError::Eval;
+use crate::error::RollatoriumError::{DivisionByZero, Eval};
 
 const EPSILON: f64 = 1e-9;
 
@@ -522,9 +522,24 @@ impl<R: RngCore> Evaluator<R> {
                     BinaryOperator::Add => left_eval.total + right_eval.total,
                     BinaryOperator::Subtract => left_eval.total - right_eval.total,
                     BinaryOperator::Multiply => left_eval.total * right_eval.total,
-                    BinaryOperator::Divide => left_eval.total / right_eval.total,
-                    BinaryOperator::IntDivide => (left_eval.total / right_eval.total).trunc(),
-                    BinaryOperator::Modulo => left_eval.total % right_eval.total,
+                    BinaryOperator::Divide => {
+                        if !right_eval.total.is_normal() {
+                            return Err(DivisionByZero);
+                        }
+                        left_eval.total / right_eval.total
+                    }
+                    BinaryOperator::IntDivide => {
+                        if !right_eval.total.is_normal() {
+                            return Err(DivisionByZero);
+                        }
+                        (left_eval.total / right_eval.total).trunc()
+                    }
+                    BinaryOperator::Modulo => {
+                        if !right_eval.total.is_normal() {
+                            return Err(DivisionByZero);
+                        }
+                        left_eval.total % right_eval.total
+                    }
                     BinaryOperator::Equal => (left_eval.total == right_eval.total) as i32 as f64,
                     BinaryOperator::NotEqual => (left_eval.total != right_eval.total) as i32 as f64,
                     BinaryOperator::Greater => (left_eval.total > right_eval.total) as i32 as f64,

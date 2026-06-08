@@ -25,4 +25,10 @@ pub enum RollatoriumError {
     /// size or exceeding the configured maximum number of rolls.
     #[error("Evaluation error: {0}")]
     Eval(String),
+    /// An expression divided (or took a remainder) by a zero divisor.
+    ///
+    /// Floating-point division by zero would otherwise produce a non-finite
+    /// total (`inf`/`NaN`); this variant surfaces it as a handled error instead.
+    #[error("Division by zero")]
+    DivisionByZero,
 }
