@@ -19,11 +19,10 @@ and [`CLAUDE.md`](CLAUDE.md) for the layout and development commands.
 
 ```rust
 // Runtime parse + evaluate:
-let result = rollatorium::roll("4d6kh3 + 2 [strength]")?;
+let result = rollatorium::roll("4d6kh3 + 2 [strength]").unwrap();
 
 // Compile-time parse + validate (a bad string is a compile error):
 let ast = rollatorium::dice!("4d6kh3 [strength]"); // Node<&'static str>
-# Ok::<(), rollatorium::RollatoriumError>(())
 ```
 
 Licensed under either of MIT (`LICENSE-MIT`) or Apache-2.0 (`LICENSE-APACHE`) at

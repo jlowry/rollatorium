@@ -41,6 +41,27 @@ if let Value::Dice(pool) = roll("4d6kh3").unwrap().value {
 }
 ```
 
+## Compile-time expressions: the `dice!` macro
+
+`dice!` parses and validates an expression at **compile time** — an invalid
+string is a compile error pointing at the literal — and expands to owned AST
+construction with no runtime parsing. The result is a
+[`Node`]`<&'static str>`, so it drops straight into a `LazyLock`/`OnceLock`:
+
+```rust
+use std::sync::LazyLock;
+use rollatorium::{Node, dice, eval};
+
+static ATTACK: LazyLock<Node<&'static str>> =
+    LazyLock::new(|| dice!("4d6kh3 [strength]"));
+
+let total = eval(&ATTACK).unwrap().total;
+assert!((3.0..=18.0).contains(&total));
+```
+
+The macro is enabled by the default `macros` feature; turn it off with
+`default-features = false` if you only need runtime parsing.
+
 ## Expression syntax
 
 | Syntax        | Meaning                                            |
@@ -62,6 +83,8 @@ code without going through a string.
 
 ## Cargo features
 
+- `macros` *(default)* — the compile-time [`dice!`] macro. Disabling it drops the
+  `rollatorium-macros` dependency.
 - `serde` — derive `Serialize`/`Deserialize` on the AST and result types.
 - `fail-on-warnings` — turn warnings (including missing docs) into hard errors;
   intended for CI.

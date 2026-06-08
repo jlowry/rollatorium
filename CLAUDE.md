@@ -104,9 +104,11 @@ Notes:
 
 - The CI test runner is **cargo-nextest**, not `cargo test`. The default profile
   in `.config/nextest.toml` filters out `binary_id(rollatorium::test_proptest)`,
-  so the proptest binary does **not** run by default — invoke it explicitly
-  (e.g. `cargo nextest run -E 'binary_id(rollatorium::test_proptest)'` or
-  `cargo test --test test_proptest`) when you need it.
+  so the proptest binary does **not** run by default — invoke it explicitly when
+  you need it, either with `cargo test --test test_proptest` or with
+  `cargo nextest run -E 'binary_id(rollatorium::test_proptest)' --ignore-default-filter`
+  (the `--ignore-default-filter` is required, otherwise the default filter still
+  excludes it and nothing runs).
 - Fuzzing needs nightly + `cargo install cargo-fuzz`. `ci/run-fuzz.sh` honors
   `CARGO`, `FUZZ_TARGET` (default `parser`), and `FUZZ_RUNS` (default `10000`).
 
@@ -116,9 +118,10 @@ Notes:
   cocogitto in CI (`cocogitto_push.yml`, `cocogitto_pull_request.yml`). Use
   prefixes like `feat:`, `fix:`, `docs:`, `chore:`, `test:`, `refactor:`.
 - **No unsafe code.** The crate sets `#![forbid(unsafe_code)]`.
-- **Warnings are errors.** Keep `cargo clippy -- -D warnings` clean. An optional
-  `fail-on-warnings` feature adds `#![deny(warnings)]`; new entry points (`lib.rs`,
-  examples) carry `#![cfg_attr(feature = "fail-on-warnings", deny(warnings))]`.
+- **Warnings are errors.** Keep `cargo clippy --workspace --all-targets -- -D warnings`
+  clean. An optional per-crate `fail-on-warnings` feature adds `#![deny(warnings)]`;
+  each crate's `lib.rs` and the examples carry
+  `#![cfg_attr(feature = "fail-on-warnings", deny(warnings))]`.
 - **Errors** use `thiserror` via `RollatoriumError` in
   `packages/rollatorium-core/src/error.rs`.
 - **Testing**: integration tests live in `packages/rollatorium/tests/` as
